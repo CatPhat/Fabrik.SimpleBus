@@ -9,6 +9,7 @@ using System.Threading.Tasks.Dataflow;
 
 namespace Fabrik.SimpleBus
 {
+    //Based on: http://stackoverflow.com/questions/14096614/creating-a-message-bus-with-tpl-dataflow
     public class InProcessBus : IBus
     {
         private readonly ConcurrentQueue<Subscription> subscriptionRequests = new ConcurrentQueue<Subscription>();
