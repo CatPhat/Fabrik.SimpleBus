@@ -1,11 +1,11 @@
-﻿using Fabrik.Common;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using Fabrik.Common;
 
 namespace Fabrik.SimpleBus
 {
@@ -13,19 +13,19 @@ namespace Fabrik.SimpleBus
     public class InProcessBus : IBus
     {
         private readonly ConcurrentQueue<Subscription> _subscriptionRequests = new ConcurrentQueue<Subscription>();
-        private readonly ConcurrentQueue<Guid> _unsubscribeRequests = new ConcurrentQueue<Guid>();
-        private readonly ActionBlock<SendMessageRequest> _messageProcessor;
+        private readonly ActionBlock<SendMessageRequest> messageProcessor;
+        private readonly ConcurrentQueue<Guid> unsubscribeRequests = new ConcurrentQueue<Guid>();
 
         public InProcessBus()
         {
             // Only ever accessed from (single threaded) ActionBlock, so it is thread safe
             var subscriptions = new List<Subscription>();
 
-            _messageProcessor = new ActionBlock<SendMessageRequest>(async request =>
+            messageProcessor = new ActionBlock<SendMessageRequest>(async request =>
             {
                 // Process unsubscribe requests
                 Guid subscriptionId;
-                while (_unsubscribeRequests.TryDequeue(out subscriptionId))
+                while (unsubscribeRequests.TryDequeue(out subscriptionId))
                 {
                     Trace.TraceInformation("Removing subscription '{0}'.".FormatWith(subscriptionId));
                     subscriptions.RemoveAll(s => s.Id == subscriptionId);
@@ -51,17 +51,18 @@ namespace Fabrik.SimpleBus
                         result = false;
                         break;
                     }
-                    
+
                     try
                     {
                         Trace.TraceInformation("Executing subscription '{0}' handler.".FormatWith(subscription.Id));
                         await subscription.Handler.Invoke(request.Payload, request.CancellationToken);
                     }
                     catch (Exception ex)
-                    {                        
-                        Trace.TraceError("There was a problem executing subscription '{0}' handler. Exception message: {1}".FormatWith(subscription.Id, ex.Message));
+                    {
+                        Trace.TraceError(
+                            "There was a problem executing subscription '{0}' handler. Exception message: {1}"
+                                .FormatWith(subscription.Id, ex.Message));
                         result = false;
-                        continue;
                     }
                 }
 
@@ -69,7 +70,7 @@ namespace Fabrik.SimpleBus
                 request.OnSendComplete(result);
             });
         }
-               
+
         public Task SendAsync<TMessage>(TMessage message)
         {
             return SendAsync(message, CancellationToken.None);
@@ -81,7 +82,7 @@ namespace Fabrik.SimpleBus
             Ensure.Argument.NotNull(cancellationToken, "cancellationToken");
 
             var tcs = new TaskCompletionSource<bool>();
-            _messageProcessor.Post(new SendMessageRequest(message, cancellationToken, result => tcs.SetResult(result)));
+            messageProcessor.Post(new SendMessageRequest(message, cancellationToken, result => tcs.SetResult(result)));
             return tcs.Task;
         }
 
@@ -97,14 +98,14 @@ namespace Fabrik.SimpleBus
         public Guid Subscribe<TMessage>(Func<TMessage, CancellationToken, Task> handler)
         {
             Ensure.Argument.NotNull(handler, "handler");
-            var subscription = Subscription.Create<TMessage>(handler);
+            var subscription = Subscription.Create(handler);
             _subscriptionRequests.Enqueue(subscription);
             return subscription.Id;
         }
 
         public void Unsubscribe(Guid subscriptionId)
         {
-            _unsubscribeRequests.Enqueue(subscriptionId);
+            unsubscribeRequests.Enqueue(subscriptionId);
         }
     }
 }
