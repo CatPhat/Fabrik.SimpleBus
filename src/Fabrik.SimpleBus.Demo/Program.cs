@@ -41,7 +41,7 @@ namespace Fabrik.SimpleBus.Demo
 
         private Task WriteMessageAsync(string message, CancellationToken cancellationToken)
         {
-            return Task.Delay(2000).ContinueWith(task => Console.WriteLine("Delegate Async Handler Received: {0}", message), cancellationToken);
+            return Task.Delay(2000).ContinueWith(task => Console.WriteLine("Delegate Async Handler Received: {0}", message));
         }
     }
 
