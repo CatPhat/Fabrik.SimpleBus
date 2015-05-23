@@ -13,19 +13,19 @@ namespace Fabrik.SimpleBus
     public class InProcessBus : IBus
     {
         private readonly ConcurrentQueue<Subscription> _subscriptionRequests = new ConcurrentQueue<Subscription>();
-        private readonly ActionBlock<SendMessageRequest> messageProcessor;
-        private readonly ConcurrentQueue<Guid> unsubscribeRequests = new ConcurrentQueue<Guid>();
+        private readonly ActionBlock<SendMessageRequest> _messageProcessor;
+        private readonly ConcurrentQueue<Guid> _unsubscribeRequests = new ConcurrentQueue<Guid>();
 
         public InProcessBus()
         {
             // Only ever accessed from (single threaded) ActionBlock, so it is thread safe
             var subscriptions = new List<Subscription>();
 
-            messageProcessor = new ActionBlock<SendMessageRequest>(async request =>
+            _messageProcessor = new ActionBlock<SendMessageRequest>(async request =>
             {
                 // Process unsubscribe requests
                 Guid subscriptionId;
-                while (unsubscribeRequests.TryDequeue(out subscriptionId))
+                while (_unsubscribeRequests.TryDequeue(out subscriptionId))
                 {
                     Trace.TraceInformation("Removing subscription '{0}'.".FormatWith(subscriptionId));
                     subscriptions.RemoveAll(s => s.Id == subscriptionId);
@@ -82,7 +82,7 @@ namespace Fabrik.SimpleBus
             Ensure.Argument.NotNull(cancellationToken, "cancellationToken");
 
             var tcs = new TaskCompletionSource<bool>();
-            messageProcessor.Post(new SendMessageRequest(message, cancellationToken, result => tcs.SetResult(result)));
+            _messageProcessor.Post(new SendMessageRequest(message, cancellationToken, result => tcs.SetResult(result)));
             return tcs.Task;
         }
 
@@ -105,7 +105,7 @@ namespace Fabrik.SimpleBus
 
         public void Unsubscribe(Guid subscriptionId)
         {
-            unsubscribeRequests.Enqueue(subscriptionId);
+            _unsubscribeRequests.Enqueue(subscriptionId);
         }
     }
 }
